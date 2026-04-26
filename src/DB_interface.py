@@ -2,7 +2,7 @@ import sqlite3
 import hashlib
 import os
 import time
-from model import FullRecommendationModel
+from model import FullRecommendationModel, FilteringModel
 
 # Simple role system (can be expanded later)
 ROLE_USER = 0
@@ -343,6 +343,44 @@ class DatabaseInterface:
             """, (username,))
         return cursor.fetchone()
 
+    def admin_list_all_recommendations(self, offset:int = 0, limit: int = 10) -> list[FullRecommendationModel]:
+        """
+        Fetch all Recommendations.
+
+        Use after authenticating user as admin.
+        """
+        with self._connection() as connection:
+            cursor = connection.execute("""
+            SELECT DISTINCT r.recommendation_id FROM recommendations
+            LIMIT ?
+            OFFSET ?
+            """, (limit, offset))
+            
+            recommendation_ids = [
+                recommendation_id
+                for (recommendation_id,) in cursor.fetchall()
+            ]
+        
+        # Convert IDs into full objects
+        return [
+            self.get_hydrated_recommendation(recommendation_id)
+            for recommendation_id in recommendation_ids
+        ]
+    
+    def admin_delete_recommendation(self, recommendation_id: int):
+        """
+        Delete a recommendation.
+
+        Use after authenticating user as admin.
+        """
+        with self._connection() as connection:
+            cursor = connection.execute("""
+            DELETE FROM recommendations r
+            WHERE r.recommendation_id = ?
+            """, (recommendation_id,))
+            connection.commit()
+                        
+        
 
 # -------------------------
 # SIMPLE CLI TEST INTERFACE
