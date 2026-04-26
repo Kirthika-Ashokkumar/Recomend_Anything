@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 import os
+import time
 from model import FullRecommendationModel
 
 # Simple role system (can be expanded later)
@@ -158,6 +159,194 @@ class DatabaseInterface:
             for recommendation_id in recommendation_ids
         ]
 
+    # Create recommendation
+    def create_recommendation(
+        self,
+        poster_id: int,
+        title: str,
+        description: str,
+        rating: int,
+        tags: list[str] | None = None,
+        multimedia_urls: list[str] | None = None
+    ) -> FullRecommendationModel:
+        """
+        Create a new recommendation post with tags and multimedia URLs.
+
+        This is the functionality:
+        - Insert the main recommendation into recommendations
+        - Insert tags into tags
+        - Insert multimedia URLs into multimedia_urls
+        - Return the full hydrated recommendation
+        """
+
+        if tags is None:
+            tags = []
+
+        if multimedia_urls is None:
+            multimedia_urls = []
+
+        if title.strip() == "":
+            raise ValueError("Title cannot be empty.")
+
+        if description.strip() == "":
+            raise ValueError("Description cannot be empty.")
+
+        if rating < 1 or rating > 5:
+            raise ValueError("Rating must be between 1 and 5.")
+
+        date = int(time.time())
+
+        with self._connection() as connection:
+            cursor = connection.execute("""
+                INSERT INTO recommendations
+                (poster_id, title, description, rating, date)
+                VALUES (?, ?, ?, ?, ?)
+            """, (poster_id, title, description, rating, date))
+
+            recommendation_id = cursor.lastrowid
+
+            for tag in tags:
+                cleaned_tag = tag.strip().lower()
+
+                if cleaned_tag != "":
+                    connection.execute("""
+                        INSERT INTO tags
+                        (recommendation_id, tag)
+                        VALUES (?, ?)
+                    """, (recommendation_id, cleaned_tag))
+
+            for url in multimedia_urls:
+                cleaned_url = url.strip()
+
+                if cleaned_url != "":
+                    connection.execute("""
+                        INSERT INTO multimedia_urls
+                        (recommendation_id, multimedia_url)
+                        VALUES (?, ?)
+                    """, (recommendation_id, cleaned_url))
+
+            connection.commit()
+
+        return self.get_hydrated_recommendation(recommendation_id)
+    
+
+
+    # -------------------------
+    # PASSWORD HANDLING
+    # -------------------------
+
+    def _hash_password(self, password: str) -> bytes:
+        """
+        Hash a password using PBKDF2 + SHA-256.
+
+        - Generates a random salt
+        - Returns: salt + hash (stored together in DB)
+        """
+        salt = os.urandom(16)
+
+        hashed = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            100000  # iteration count (slows brute-force attacks)
+        )
+
+        return salt + hashed
+
+
+    def _check_password(self, password: str, stored_password: bytes) -> bool:
+        """
+        Verify a password against stored (salt + hash).
+
+        Steps:
+        1. Extract salt from stored value
+        2. Recompute hash with same salt
+        3. Compare results
+        """
+        salt = stored_password[:16]
+        stored_hash = stored_password[16:]
+
+        test_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            100000
+        )
+
+        return test_hash == stored_hash
+
+
+    # -------------------------
+    # USER MANAGEMENT
+    # -------------------------
+
+    def create_user(self, username: str, password: str, role: int = 0) -> bool:
+        """
+        Create a new user.
+
+        - Hashes password before storing
+        - Returns False if username already exists
+        """
+        hashed_password = self._hash_password(password)
+
+        try:
+            with self._connection() as connection:
+                connection.execute("""
+                    INSERT INTO users (username, password, role)
+                    VALUES (?, ?, ?)
+                """, (username, hashed_password, role))
+                connection.commit()
+            return True
+
+        except sqlite3.IntegrityError:
+            # Triggered by UNIQUE constraint on username
+            return False
+
+
+    def verify_login(self, username: str, password: str) -> int | None:
+        """
+        Verify login credentials.
+
+        Returns:
+        - user_id if login is successful
+        - None if username not found or password incorrect
+        """
+        with self._connection() as connection:
+            cursor = connection.execute("""
+                SELECT user_id, password FROM users
+                WHERE username = ?
+            """, (username,))
+            row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        user_id, stored_password = row
+
+        if self._check_password(password, stored_password):
+            return user_id
+
+        return None
+
+
+    def get_user_by_username(self, username: str):
+        """
+        Fetch basic user info (no password).
+
+        Useful after login to get role or display name.
+        """
+        with self._connection() as connection:
+            cursor = connection.execute("""
+                SELECT user_id, username, role
+                FROM users
+                WHERE username = ?
+            """, (username,))
+        return cursor.fetchone()
+
+
+# -------------------------
+# SIMPLE CLI TEST INTERFACE
+# -------------------------
 
     # -------------------------
     # PASSWORD HANDLING
