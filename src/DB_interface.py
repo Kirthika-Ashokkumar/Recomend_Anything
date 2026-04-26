@@ -158,6 +158,36 @@ class DatabaseInterface:
             self.get_hydrated_recommendation(recommendation_id)
             for recommendation_id in recommendation_ids
         ]
+    
+    def add_follower(target_user_id: int, follower_user_id: int):
+         """
+         Very simple insert into the follower's table
+         """
+         with self._connection() as connection:
+            cursor = connection.execute("""
+            INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
+            """, (target_user_id, follower_user_id))
+    
+    def send_reqs(recommendation_id:int, receiver_id:int):
+        with self._connection() as connection:
+            connection.execute("""
+            INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
+            """, (recommendation_id, receiver_id))
+
+    def list_followers(target_user_id: int):
+        with self._connection() as connection:
+            cursor = connection.execute("""
+            SELECT u.username FROM follows f
+                JOIN users u ON f.follower_user_id = u.user_id
+                WHERE target_user_id = ?
+            """, (target_user_id,))
+            
+            usernames = []
+            for row in cursor.fetchall():
+                username = row[0]
+                usernames.append(username)
+
+            return usernames
 
     # Create recommendation
     def create_recommendation(
