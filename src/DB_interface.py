@@ -159,6 +159,37 @@ class DatabaseInterface:
             for recommendation_id in recommendation_ids
         ]
     
+    def get_recommendations_by_tag(self, tag: str, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+        """
+        Get recommendations by tag matching
+
+        Uses pagination (limit + offset) to be consistent
+        """
+        with self.connection() as connection:
+            cursor = connection.execute("""
+            SELECT r.recommendation_id FROM recommendations r
+                JOIN tags t ON r.recommendation_id = t.recommendation_id 
+                WHERE t.tag = ?
+            UNION
+            SELECT r.recommendation_id FROM recommendations r 
+                JOIN follows f ON r.poster_id = f.target_user_id
+                WHERE f.follower_user_id = ?
+            LIMIT ?
+            OFFSET ?
+            """, (tag, user_id, limit, offset))
+
+            recommendation_ids = [
+                recommendation_id
+                for (recommendation_id,) in cursor.fetchall()
+            ]
+        
+        # Convert IDs into full objects
+        return [
+            self.get_hydrated_recommendation(recommendation_id)
+            for recommendation_id in recommendation_ids
+        ]
+
+        
     def add_follower(target_user_id: int, follower_user_id: int):
          """
          Very simple insert into the follower's table
@@ -188,6 +219,94 @@ class DatabaseInterface:
                 usernames.append(username)
 
             return usernames
+
+
+    # -------------------------
+    # ADMIN FUNCTIONS
+    # -------------------------
+
+
+    def has_permission(user_id: int, role: int):
+        with self.connection() as connection:
+            cursor = connection.execute('''
+                SELECT COUNT(*) 
+                FROM users u
+                WHERE u.user_id = ? AND u.role = ?
+            ''', (user_id, role))
+        return cursor.fetchone()[0] > 0
+
+    def list_recommendations(self, role: int, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+        """
+        Get recommendations for specific user
+        Uses pagination (limit + offset) to be consistent
+        """
+        if has_permission(user_id, role):
+            with self.connection() as connection:
+                cursor = connection.execute("""
+                SELECT r.recommendation_id FROM recommendations r
+                LIMIT ?
+                OFFSET ?
+                """, (limit, offset))
+
+                recommendation_ids = [
+                    recommendation_id
+                    for (recommendation_id,) in cursor.fetchall()
+                ]
+            
+            # Convert IDs into full objects
+            return [
+                self.get_hydrated_recommendation(recommendation_id)
+                for recommendation_id in recommendation_ids
+            ]
+        return None
+
+    def delete_recommendation(self, role: int, user_id: int, recommendation_id: int):
+        """
+        Delete recommendations from specific recommendation_id
+        
+        """
+        try:
+            if has_permission(user_id, role):
+                with self.connection() as connection:
+                    cursor = connection.execute("""
+                    DELETE FROM recommendations
+                    WHERE recommendation_id = ?
+                    """, (recommendation_id,))
+                    connection.commit()
+                return True
+
+        except sqlite3.IntegrityError:
+            # Triggered by violations of DELETE constraints
+            print(f"Integrity error occurred: {e}")
+            return False
+        
+    def list_recommendations_tags(self, role: int, user_id: int, tag: str, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+        """
+        Get recommendations for specific tag
+        Uses pagination (limit + offset) to be consistent
+        """
+        if has_permission(user_id, role):
+            with self.connection() as connection:
+                cursor = connection.execute("""
+                SELECT r.recommendation_id FROM recommendations r
+                JOIN tags t ON r.recommendation_id = t.recommendation_id 
+                WHERE t.tag = ?
+                LIMIT ?
+                OFFSET ?
+                """, (tag, limit, offset))
+
+                recommendation_ids = [
+                    recommendation_id
+                    for (recommendation_id,) in cursor.fetchall()
+                ]
+            
+            # Convert IDs into full objects
+            return [
+                self.get_hydrated_recommendation(recommendation_id)
+                for recommendation_id in recommendation_ids
+            ]
+        return None
+
 
     # Create recommendation
     def create_recommendation(
