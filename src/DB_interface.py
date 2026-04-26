@@ -43,6 +43,7 @@ class DatabaseInterface:
                 rating              INTEGER NOT NULL,
                 date                INTEGER NOT NULL,
                 FOREIGN KEY (poster_id) REFERENCES users(user_id)
+                ON DELETE CASCADE
             )
             """)
             
