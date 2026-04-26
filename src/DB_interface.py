@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 import os
+import time
 from model import FullRecommendationModel
 
 # Simple role system (can be expanded later)
@@ -157,6 +158,77 @@ class DatabaseInterface:
             self.get_hydrated_recommendation(recommendation_id)
             for recommendation_id in recommendation_ids
         ]
+
+    # Create recommendation
+    def create_recommendation(
+        self,
+        poster_id: int,
+        title: str,
+        description: str,
+        rating: int,
+        tags: list[str] | None = None,
+        multimedia_urls: list[str] | None = None
+    ) -> FullRecommendationModel:
+        """
+        Create a new recommendation post with tags and multimedia URLs.
+
+        This is the functionality:
+        - Insert the main recommendation into recommendations
+        - Insert tags into tags
+        - Insert multimedia URLs into multimedia_urls
+        - Return the full hydrated recommendation
+        """
+
+        if tags is None:
+            tags = []
+
+        if multimedia_urls is None:
+            multimedia_urls = []
+
+        if title.strip() == "":
+            raise ValueError("Title cannot be empty.")
+
+        if description.strip() == "":
+            raise ValueError("Description cannot be empty.")
+
+        if rating < 1 or rating > 5:
+            raise ValueError("Rating must be between 1 and 5.")
+
+        date = int(time.time())
+
+        with self._connection() as connection:
+            cursor = connection.execute("""
+                INSERT INTO recommendations
+                (poster_id, title, description, rating, date)
+                VALUES (?, ?, ?, ?, ?)
+            """, (poster_id, title, description, rating, date))
+
+            recommendation_id = cursor.lastrowid
+
+            for tag in tags:
+                cleaned_tag = tag.strip().lower()
+
+                if cleaned_tag != "":
+                    connection.execute("""
+                        INSERT INTO tags
+                        (recommendation_id, tag)
+                        VALUES (?, ?)
+                    """, (recommendation_id, cleaned_tag))
+
+            for url in multimedia_urls:
+                cleaned_url = url.strip()
+
+                if cleaned_url != "":
+                    connection.execute("""
+                        INSERT INTO multimedia_urls
+                        (recommendation_id, multimedia_url)
+                        VALUES (?, ?)
+                    """, (recommendation_id, cleaned_url))
+
+            connection.commit()
+
+        return self.get_hydrated_recommendation(recommendation_id)
+    
 
 
     # -------------------------
