@@ -3,6 +3,7 @@ import hashlib
 import os
 import time
 from model import FullRecommendationModel
+import logging
 
 # Simple role system (can be expanded later)
 ROLE_USER = 0
@@ -14,12 +15,14 @@ class DatabaseInterface:
     def __init__(self, filepath: str):
         # Store database file path and ensure tables exist
         self.filepath = filepath
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
         self._create_tables()
     
     def _create_tables(self):
         """Create all required tables if they do not already exist."""
         with self._connection() as connection:
-
+            self.logger.info("Creating tables")
             # Users table:
             # - username is UNIQUE to prevent duplicate logins
             # - password stored as BLOB (hashed + salted, not plaintext)
@@ -121,6 +124,8 @@ class DatabaseInterface:
             """, (recommendation_id,))
             multimedia_urls = [url for (url,) in cursor.fetchall()]
             
+            self.logger.info(f"Fetched hydrated recommendation. R\"{recommendation_id}\" - {title}")
+            
             return FullRecommendationModel(
                 recommendation_id, poster_id, title,
                 description, rating, date,
@@ -153,6 +158,8 @@ class DatabaseInterface:
                 recommendation_id
                 for (recommendation_id,) in cursor.fetchall()
             ]
+            
+            self.logger.info(f"Fetched recommendations for user U\"{user_id}\". {len(recommendation_ids)} matches.")
         
         # Convert IDs into full objects
         return [
@@ -186,6 +193,8 @@ class DatabaseInterface:
                 recommendation_id
                 for (recommendation_id,) in cursor.fetchall()
             ]
+            
+            self.logger.info(f"Fetched recommendation with tag T\"{tag}\" for user U\"{user_id}\". {len(recommendation_ids)} matches.")
 
         return [
             self.get_hydrated_recommendation(recommendation_id)
@@ -204,6 +213,7 @@ class DatabaseInterface:
             cursor = connection.execute("""
             INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
             """, (target_user_id, follower_user_id))
+            self.logger.info(f"U\"{follower_user_id}\" follows U\"{target_user_id}\"")
     
     def send_reqs(self, recommendation_id:int, receiver_id:int):
         """
@@ -213,8 +223,9 @@ class DatabaseInterface:
             connection.execute("""
             INSERT INTO recommends(recommendation_id, receiver_id) VALUES (?, ?)
             """, (recommendation_id, receiver_id))
+            self.logger.info(f"Recommend R\"{recommendation_id}\" to U\"{receiver_id}\"")
 
-    def list_followers(self, target_user_id: int):
+    def list_followers(self, target_user_id: int) -> list[str]:
         """
         list  followers
         """
@@ -229,6 +240,8 @@ class DatabaseInterface:
             for row in cursor.fetchall():
                 username = row[0]
                 usernames.append(username)
+
+            self.logger.info(f"U\"{target_user_id}\" has {len(usernames)} followers.")
 
             return usernames
     
@@ -282,7 +295,8 @@ class DatabaseInterface:
                 self.get_hydrated_recommendation(recommendation_id)
                 for recommendation_id in recommendation_ids
             ]
-        return None
+        self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
+        return []
 
     def delete_recommendation(self, role: int, user_id: int, recommendation_id: int):
         """
@@ -298,8 +312,9 @@ class DatabaseInterface:
                     """, (recommendation_id,))
                     connection.commit()
                 return True
-
+            self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
         except sqlite3.IntegrityError:
+            self.logger.error(f"Failed to delete R\"{user_id}\"")
             # Triggered by violations of DELETE constraints
             return False
         
@@ -328,7 +343,8 @@ class DatabaseInterface:
                 self.get_hydrated_recommendation(recommendation_id)
                 for recommendation_id in recommendation_ids
             ]
-        return None
+        self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
+        return []
 
 
     # Create recommendation
@@ -398,6 +414,8 @@ class DatabaseInterface:
                     """, (recommendation_id, cleaned_url))
 
             connection.commit()
+            
+            self.logger.info(f"Created Recommendation R\"{recommendation_id}\"")
 
         return self.get_hydrated_recommendation(recommendation_id)
     
@@ -471,6 +489,7 @@ class DatabaseInterface:
 
         except sqlite3.IntegrityError:
             # Triggered by UNIQUE constraint on username
+            self.logger.warning(f"\"{username}\" already exists.")
             return False
 
 
@@ -497,6 +516,7 @@ class DatabaseInterface:
         if self._check_password(password, stored_password):
             return user_id
 
+        self.logger.warning(f"Failed log in attempt for U\"{username}\"")
         return None
 
 
@@ -520,6 +540,11 @@ class DatabaseInterface:
 # -------------------------
 
 if __name__ == "__main__":
+    logging.basicConfig(filename="logs/test.log",
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.DEBUG)
     db = DatabaseInterface("./test.db")
 
     # Basic command-line interaction for testing
