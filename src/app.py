@@ -963,6 +963,12 @@ class AdminPage(tk.Frame):
 
 if __name__ == "__main__":
     from DB_interface import DatabaseInterface
+    import logging
+    logging.basicConfig(filename="logs/test.log",
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.DEBUG)
     db  = DatabaseInterface("./Recommend_Anything.db")
     app = App(db)
     app.mainloop()
