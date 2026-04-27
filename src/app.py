@@ -161,7 +161,6 @@ def _media_widget(parent, url: str):
 
 
 def _show_image(frame, placeholder, photo, url):
-    # Guard: the card may have been destroyed while the image was fetching
     if not _widget_alive(placeholder):
         return
     placeholder.destroy()
@@ -760,11 +759,53 @@ class PostPage(tk.Frame):
         tags  = [t.strip() for t in self._tags.get().split(",") if t.strip()]
         urls  = [u.strip() for u in self._urls.get().split(",") if u.strip()]
 
+        # ── Basic field validation ────────────────────────────────────────────
         if not title:
             self._status.config(text="Title cannot be empty.", fg=ACCENT2); return
         if not desc:
             self._status.config(text="Description cannot be empty.", fg=ACCENT2); return
 
+        # ── Validate every receiver BEFORE writing anything to the DB ─────────
+        # If "Send To" is filled in, every name must exist AND be a follower.
+        # If blank, the post is public to all followers — no check needed.
+        raw_names = [s.strip() for s in self._send.get().split(",") if s.strip()]
+
+        if raw_names:
+            not_found  = []
+            not_follow = []
+            validated  = []   # (uname, user_id) pairs that passed both checks
+
+            for uname in raw_names:
+                row = self.app.db.get_user_by_username(uname)
+                if not row:
+                    not_found.append(uname)
+                    continue
+
+                target_id = row[0]
+                try:
+                    is_flwr = self.app.db.is_follower(uid, target_id)
+                except AttributeError:
+                    is_flwr = True   # method not yet on DB — allow through
+
+                if not is_flwr:
+                    not_follow.append(uname)
+                    continue
+
+                validated.append((uname, target_id))
+
+            # If ANY name failed, report all problems and stop — do NOT save yet
+            if not_found or not_follow:
+                parts = ["Fix the recipients before posting:"]
+                if not_found:
+                    parts.append(f"User(s) not found: {', '.join(not_found)}.")
+                if not_follow:
+                    parts.append(f"Not your follower: {', '.join(not_follow)}.")
+                self._status.config(text="  ".join(parts), fg=ACCENT2)
+                return   # ← DB untouched
+        else:
+            validated = []   # public post — no targeted sends
+
+        # ── All checks passed — now write to the DB ───────────────────────────
         try:
             rec = self.app.db.create_recommendation(uid, title, desc, self._rating, tags, urls)
         except ValueError as e:
@@ -772,45 +813,19 @@ class PostPage(tk.Frame):
         except Exception as e:
             self._status.config(text=f"Error: {e}", fg=ACCENT2); return
 
-        sent       = 0
-        not_found  = []
-        not_follow = []
-
-        for uname in [s.strip() for s in self._send.get().split(",") if s.strip()]:
-            row = self.app.db.get_user_by_username(uname)
-            if not row:
-                not_found.append(uname)
-                continue
-
-            target_id = row[0]
-
-            # Verify the target is actually a follower of the poster
-            try:
-                is_follower = self.app.db.is_follower(uid, target_id)
-            except AttributeError:
-                # is_follower not yet added to DB — skip check, send anyway
-                is_follower = True
-
-            if not is_follower:
-                not_follow.append(uname)
-                continue
-
+        sent = 0
+        for uname, target_id in validated:
             try:
                 self.app.db.send_reqs(rec.recommendation_id, target_id)
                 sent += 1
             except Exception:
                 pass
 
-        # Build status message
+        # ── Success message ───────────────────────────────────────────────────
         parts = [f"✓  Posted!  (ID {rec.recommendation_id})"]
         if sent:
-            parts.append(f"Sent to {sent} follower(s).")
-        if not_follow:
-            parts.append(f"Skipped (not your follower): {', '.join(not_follow)}.")
-        if not_found:
-            parts.append(f"Not found: {', '.join(not_found)}.")
-
-        self._status.config(text="  ".join(parts), fg=SUCCESS if not (not_follow or not_found) else WARNING)
+            parts.append(f"Sent directly to {sent} follower(s).")
+        self._status.config(text="  ".join(parts), fg=SUCCESS)
         self._clear(keep_status=True)
 
     def _clear(self, keep_status=False):

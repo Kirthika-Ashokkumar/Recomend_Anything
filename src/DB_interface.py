@@ -1,3 +1,32 @@
+"""
+DB_interface.py  —  SQLite database interface for Recommend Anything.
+Requires: model.py  (same directory)
+ 
+Tables
+  users             stores user accounts (hashed passwords, roles)
+  recommendations   recommendation posts
+  follows           follow relationships between users
+  recommends        direct recommendation sends to specific users
+  tags              tags attached to recommendations
+  multimedia_urls   media URLs attached to recommendations
+ 
+Roles
+  ROLE_USER  = 0   standard user
+  ROLE_ADMIN = 1   admin — can list/delete all recommendations
+ 
+Key Methods
+  User management   create_user, verify_login, get_user_by_username
+  Feed              get_recommendations_for_user, get_recommendations_by_tag
+  Posting           create_recommendation
+  Social            add_follower, is_follower, list_followers, send_reqs
+  Admin             list_recommendations, list_recommendations_tags,
+                    delete_recommendation, has_permission
+ 
+Password Security
+  Passwords are hashed with PBKDF2-HMAC-SHA256 + 16-byte random salt.
+  The salt is prepended to the hash and stored together as a BLOB.
+  Plain-text passwords are never stored.
+"""
 import sqlite3
 import hashlib
 import os
@@ -206,23 +235,20 @@ class DatabaseInterface:
     # -------------------------
 
     def add_follower(self, target_user_id: int, follower_user_id: int):
-         """
-         Very simple insert into the follower's table
-         """
-         with self._connection() as connection:
-            cursor = connection.execute("""
+        with self._connection() as connection:
+            connection.execute("""
             INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
             """, (target_user_id, follower_user_id))
+            connection.commit() 
             self.logger.info(f"U\"{follower_user_id}\" follows U\"{target_user_id}\"")
     
-    def send_reqs(self, recommendation_id:int, receiver_id:int):
-        """
-        Recommend specific followers
-        """
+    def send_reqs(self, recommendation_id: int, receiver_id: int):
+        """Recommend specific followers"""
         with self._connection() as connection:
             connection.execute("""
             INSERT INTO recommends(recommendation_id, receiver_id) VALUES (?, ?)
             """, (recommendation_id, receiver_id))
+            connection.commit()
             self.logger.info(f"Recommend R\"{recommendation_id}\" to U\"{receiver_id}\"")
 
     def list_followers(self, target_user_id: int) -> list[str]:
