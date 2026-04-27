@@ -160,32 +160,33 @@ class DatabaseInterface:
             for recommendation_id in recommendation_ids
         ]
     
-        def get_recommendations_by_tag(self, tag: str, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+    def get_recommendations_by_tag(self, tag: str, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
         """
-        Get recommendations by tag matching
-
-        Uses pagination (limit + offset) to be consistent
+        Get recommendations visible to the user, filtered by tag.
+        Visible = from followed users OR directly sent to them.
         """
-        with self._connection() as connection:
         with self._connection() as connection:
             cursor = connection.execute("""
             SELECT r.recommendation_id FROM recommendations r
-                JOIN tags t ON r.recommendation_id = t.recommendation_id 
+                JOIN tags t ON r.recommendation_id = t.recommendation_id
                 WHERE t.tag = ?
-            UNION
-            SELECT r.recommendation_id FROM recommendations r 
-                JOIN follows f ON r.poster_id = f.target_user_id
-                WHERE f.follower_user_id = ?
+                AND r.recommendation_id IN (
+                    SELECT r2.recommendation_id FROM recommendations r2
+                        JOIN follows f ON r2.poster_id = f.target_user_id
+                        WHERE f.follower_user_id = ?
+                    UNION
+                    SELECT m.recommendation_id FROM recommends m
+                        WHERE m.receiver_id = ?
+                )
             LIMIT ?
             OFFSET ?
-            """, (tag, user_id, limit, offset))
+            """, (tag, user_id, user_id, limit, offset))
 
             recommendation_ids = [
                 recommendation_id
                 for (recommendation_id,) in cursor.fetchall()
             ]
-        
-        # Convert IDs into full objects
+
         return [
             self.get_hydrated_recommendation(recommendation_id)
             for recommendation_id in recommendation_ids
@@ -230,13 +231,23 @@ class DatabaseInterface:
                 usernames.append(username)
 
             return usernames
+    
+    def is_follower(self, target_user_id: int, follower_user_id: int) -> bool:
+        """
+        Check if follower_user_id follows target_user_id.
+        Returns True if the follow relationship exists, False otherwise.
+        """
+        with self._connection() as connection:
+            cursor = connection.execute("""
+                SELECT COUNT(*) FROM follows
+                WHERE target_user_id = ? AND follower_user_id = ?
+            """, (target_user_id, follower_user_id))
+            return cursor.fetchone()[0] > 0
 
 
     # -------------------------
     # ADMIN FUNCTIONS
     # -------------------------
-
-
     def has_permission(self, user_id: int, role: int):
         with self._connection() as connection:
             cursor = connection.execute('''
@@ -390,7 +401,6 @@ class DatabaseInterface:
 
         return self.get_hydrated_recommendation(recommendation_id)
     
-
 
     # -------------------------
     # PASSWORD HANDLING
