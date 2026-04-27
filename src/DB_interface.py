@@ -160,13 +160,13 @@ class DatabaseInterface:
             for recommendation_id in recommendation_ids
         ]
     
-    def get_recommendations_by_tag(self, tag: str, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+        def get_recommendations_by_tag(self, tag: str, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
         """
         Get recommendations by tag matching
 
         Uses pagination (limit + offset) to be consistent
         """
-        with self.connection() as connection:
+        with self._connection() as connection:
             cursor = connection.execute("""
             SELECT r.recommendation_id FROM recommendations r
                 JOIN tags t ON r.recommendation_id = t.recommendation_id 
@@ -191,7 +191,7 @@ class DatabaseInterface:
         ]
 
         
-    def add_follower(target_user_id: int, follower_user_id: int):
+    def add_follower(self, target_user_id: int, follower_user_id: int):
          """
          Very simple insert into the follower's table
          """
@@ -200,13 +200,13 @@ class DatabaseInterface:
             INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
             """, (target_user_id, follower_user_id))
     
-    def send_reqs(recommendation_id:int, receiver_id:int):
+    def send_reqs(self, recommendation_id:int, receiver_id:int):
         with self._connection() as connection:
             connection.execute("""
             INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
             """, (recommendation_id, receiver_id))
 
-    def list_followers(target_user_id: int):
+    def list_followers(self, target_user_id: int):
         with self._connection() as connection:
             cursor = connection.execute("""
             SELECT u.username FROM follows f
@@ -227,22 +227,24 @@ class DatabaseInterface:
     # -------------------------
 
 
-    def has_permission(user_id: int, role: int):
-        with self.connection() as connection:
+    def has_permission(self, user_id: int, role: int):
+        with self._connection() as connection:
             cursor = connection.execute('''
                 SELECT COUNT(*) 
                 FROM users u
                 WHERE u.user_id = ? AND u.role = ?
             ''', (user_id, role))
-        return cursor.fetchone()[0] > 0
+        if cursor.fetchone()[0] > 0:
+            return True
+        return False
 
     def list_recommendations(self, role: int, user_id: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
         """
         Get recommendations for specific user
         Uses pagination (limit + offset) to be consistent
         """
-        if has_permission(user_id, role):
-            with self.connection() as connection:
+        if self.has_permission(user_id, role):
+            with self._connection() as connection:
                 cursor = connection.execute("""
                 SELECT r.recommendation_id FROM recommendations r
                 LIMIT ?
@@ -267,8 +269,8 @@ class DatabaseInterface:
         
         """
         try:
-            if has_permission(user_id, role):
-                with self.connection() as connection:
+            if self.has_permission(user_id, role):
+                with self._connection() as connection:
                     cursor = connection.execute("""
                     DELETE FROM recommendations
                     WHERE recommendation_id = ?
@@ -278,7 +280,6 @@ class DatabaseInterface:
 
         except sqlite3.IntegrityError:
             # Triggered by violations of DELETE constraints
-            print(f"Integrity error occurred: {e}")
             return False
         
     def list_recommendations_tags(self, role: int, user_id: int, tag: str, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
@@ -286,8 +287,8 @@ class DatabaseInterface:
         Get recommendations for specific tag
         Uses pagination (limit + offset) to be consistent
         """
-        if has_permission(user_id, role):
-            with self.connection() as connection:
+        if self.has_permission(user_id, role):
+            with self._connection() as connection:
                 cursor = connection.execute("""
                 SELECT r.recommendation_id FROM recommendations r
                 JOIN tags t ON r.recommendation_id = t.recommendation_id 
