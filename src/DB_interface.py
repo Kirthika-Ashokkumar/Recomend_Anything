@@ -167,6 +167,7 @@ class DatabaseInterface:
         Uses pagination (limit + offset) to be consistent
         """
         with self._connection() as connection:
+        with self._connection() as connection:
             cursor = connection.execute("""
             SELECT r.recommendation_id FROM recommendations r
                 JOIN tags t ON r.recommendation_id = t.recommendation_id 
@@ -190,7 +191,10 @@ class DatabaseInterface:
             for recommendation_id in recommendation_ids
         ]
 
-        
+    # -------------------------
+    # Follower FUNCTIONS
+    # -------------------------
+
     def add_follower(self, target_user_id: int, follower_user_id: int):
          """
          Very simple insert into the follower's table
@@ -201,12 +205,18 @@ class DatabaseInterface:
             """, (target_user_id, follower_user_id))
     
     def send_reqs(self, recommendation_id:int, receiver_id:int):
+        """
+        Recommend specific followers
+        """
         with self._connection() as connection:
             connection.execute("""
-            INSERT INTO follows(target_user_id, follower_user_id) VALUES (?, ?)
+            INSERT INTO recommends(recommendation_id, receiver_id) VALUES (?, ?)
             """, (recommendation_id, receiver_id))
 
     def list_followers(self, target_user_id: int):
+        """
+        list  followers
+        """
         with self._connection() as connection:
             cursor = connection.execute("""
             SELECT u.username FROM follows f
