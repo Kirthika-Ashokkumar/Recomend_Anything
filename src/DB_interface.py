@@ -19,7 +19,7 @@ Key Methods
   Feed              get_recommendations_for_user, get_recommendations_by_tag
   Posting           create_recommendation
   Social            add_follower, is_follower, list_followers, send_reqs
-  Admin             list_recommendations, list_recommendations_tags,
+  Admin             create_admin, list_recommendations, list_recommendations_tags,
                     delete_recommendation, has_permission
  
 Password Security
@@ -287,6 +287,34 @@ class DatabaseInterface:
     # -------------------------
     # ADMIN FUNCTIONS
     # -------------------------
+     def create_admin(self, username: str, password: str, secret: str, role: int = 1) -> bool:
+        """
+        Create a new user.
+
+        - Hashes password before storing
+        - Returns False if username already exists
+        - Requires secret password to enable admin creation (Can be changed with hashing later)
+
+        """
+        hashed_password = self._hash_password(password)
+
+        try:
+            if(secret == "SECRET"):
+                with self._connection() as connection:
+                    connection.execute("""
+                        INSERT INTO users (username, password, role)
+                        VALUES (?, ?, ?)
+                    """, (username, hashed_password, role))
+                    connection.commit()
+                return True
+            else:
+                self.logger.error(f"U\"{username}\" attempted to create an admin user, however they were not an admin.")
+            
+        except sqlite3.IntegrityError:
+            # Triggered by UNIQUE constraint on username
+            self.logger.warning(f"\"{username}\" already exists.")
+            return False
+         
     def has_permission(self, user_id: int, role: int):
         with self._connection() as connection:
             cursor = connection.execute('''
