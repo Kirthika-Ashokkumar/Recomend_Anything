@@ -692,7 +692,7 @@ if __name__ == "__main__":
 
     elif adminAction == "list":
         user_idAd = db.verify_login(userAdmin, userPwd)
-        print(f"{user_idAd}")
+        print(f"User admin ID: {user_idAd}")
         recommendation = db.list_recommendations(ROLE_ADMIN, user_idAd)
         print(f"{recommendation}")
         if recommendation:
