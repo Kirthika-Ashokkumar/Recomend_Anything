@@ -106,7 +106,7 @@ SELECT recommendation_id FROM recommendations
 
 -- Delete a given recommendation
 DELETE FROM recommendations
-    WHERE recommendation_id = ?
+    WHERE recommendation_id = ? AND poster_id = ?
 
 -- List all recommendations with a given tag
 SELECT r.recommendation_id FROM recommendations r
@@ -129,7 +129,8 @@ INSERT INTO tags
 INSERT INTO multimedia_urls
     (recommendation_id, multimedia_url)
     VALUES (?, ?)
--- Create user
+    
+-- Create user and admin
 INSERT INTO users (username, password, role)
     VALUES (?, ?, ?)
 
