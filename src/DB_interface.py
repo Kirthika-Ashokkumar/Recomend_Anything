@@ -352,7 +352,7 @@ class DatabaseInterface:
         self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
         return []
 
-    def delete_recommendation(self, role: int, user_id: int, recommendation_id: int):
+    def delete_recommendation(self, role: int, user_id: int, post_id: int, recommendation_id: int) -> bool:
         """
         Delete recommendations from specific recommendation_id
         
@@ -362,11 +362,13 @@ class DatabaseInterface:
                 with self._connection() as connection:
                     cursor = connection.execute("""
                     DELETE FROM recommendations
-                    WHERE recommendation_id = ?
-                    """, (recommendation_id,))
+                    WHERE recommendation_id = ? AND poster_id = ?
+                    """, (recommendation_id, post_id))
                     connection.commit()
+                self.logger.info(f"U\"{user_id}\" deleted recommendation \"{recommendation_id}\"")
                 return True
-            self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
+            else:
+              self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
         except sqlite3.IntegrityError:
             self.logger.error(f"Failed to delete R\"{user_id}\"")
             # Triggered by violations of DELETE constraints
