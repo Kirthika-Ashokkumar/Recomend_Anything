@@ -372,7 +372,7 @@ class DatabaseInterface:
             # Triggered by violations of DELETE constraints
             return False
         
-    def list_recommendations_tags(self, role: int, user_id: int, tag: str, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
+    def list_recommendations_tags(self, role: int, user_id: int, tag: int, offset: int = 0, limit: int = 50) -> list[FullRecommendationModel]:
         """
         Get recommendations for specific tag
         Uses pagination (limit + offset) to be consistent
@@ -382,7 +382,7 @@ class DatabaseInterface:
                 cursor = connection.execute("""
                 SELECT r.recommendation_id FROM recommendations r
                 JOIN tags t ON r.recommendation_id = t.recommendation_id 
-                WHERE t.tag = ?
+                WHERE t.recommendation_id = ?
                 LIMIT ?
                 OFFSET ?
                 """, (tag, limit, offset))
@@ -391,13 +391,15 @@ class DatabaseInterface:
                     recommendation_id
                     for (recommendation_id,) in cursor.fetchall()
                 ]
+        else:
+            self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
             
             # Convert IDs into full objects
             return [
                 self.get_hydrated_recommendation(recommendation_id)
                 for recommendation_id in recommendation_ids
             ]
-        self.logger.error(f"U\"{user_id}\" attempted to use a admin function, however they were not an admin.")
+        self.logger.error(f"U\"{user_id}\" attempted to list an empty tag")
         return []
 
 
