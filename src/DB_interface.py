@@ -610,6 +610,14 @@ if __name__ == "__main__":
     username = input("Username: ").strip()
     password = input("Password: ").strip()
 
+    # Admin Testing
+    adminAction = input("Choose action (register/login/delete/list/listTag): ").strip().lower()
+    userAdmin = input("Admin User: ").strip()
+    userPwd = input("Admin password: ").strip()
+
+    # Recommendation Table Testing
+    action = input("New action (recommend): ").strip().lower()
+
     if action == "register":
         created = db.create_user(username, password, ROLE_USER)
 
@@ -625,6 +633,86 @@ if __name__ == "__main__":
             print(f"Login successful. User ID: {user_id}")
         else:
             print("Invalid username or password.")
+         
+    elif action == "recommend":
+        post_id = db.verify_login(username, password)
+        title = input("Input Recommend Title: ").strip()
+        desc = input("Enter description: ").strip()
+        rating = input("Enter rating out of 5(Optional): ").strip()
+        if rating.isdigit():
+            rate = int(rating)
+        else:
+            print("The string is not numeric.")
+        tags = input("Enter tags(Optional): ").strip()
+        media_urls = input("Input media: ")
+
+        recommendID = db.create_recommendation(post_id, title, desc, rate, tags, media_urls)
+
+        if recommendID is not None:
+            print(f"Created succesful. Recommendation id: {recommendID}")
+        else:
+            print("Error in creating recommendation")
+         
+    else:
+        print("Invalid action.")
+
+    # Admin Functions
+    if adminAction == "register":
+        secret = input("Secret word: ")
+        created1 = db.create_admin(userAdmin, userPwd, secret, ROLE_ADMIN)
+
+        if created1:
+            print("User created successfully.")
+        else:
+            print("Error.")
+
+    elif adminAction == "login":
+        user_idAd = db.verify_login(userAdmin, userPwd)
+
+        if user_idAd is not None:
+            print(f"Login successful. User ID: {user_idAd}")
+        else:
+            print("Invalid username or password.")
+
+    elif adminAction == "delete":
+        user_idAd = db.verify_login(userAdmin, userPwd)
+        post = input("Poster ID to delete from: ").strip()
+        recID = input("Rec ID to delete: ").strip()
+        if recID.isdigit() and post.isdigit():
+            rec = int(recID)
+            post = int(post)
+        else:
+            print("The string is not numeric.")
+        deleted = db.delete_recommendation(ROLE_ADMIN, user_idAd, post, rec)
+
+        if deleted:
+            print(f"Delete succesful from User ID: {post} and rec ID: {recID}")
+        else:
+            print(f"Delete invalid.{deleted, recID}")
+
+    elif adminAction == "list":
+        user_idAd = db.verify_login(userAdmin, userPwd)
+        print(f"{user_idAd}")
+        recommendation = db.list_recommendations(ROLE_ADMIN, user_idAd)
+        print(f"{recommendation}")
+        if recommendation:
+            print("DONE")
+        else:
+            print("None exists")
+
+    elif adminAction == "listtag":
+        user_idAd = db.verify_login(userAdmin, userPwd)
+        tag = input("Tag ID to list: ").strip()
+        if tag.isdigit():
+            tag = int(tag)
+        else:
+            print("The string is not numeric.")
+        recommendation = db.list_recommendations_tags(ROLE_ADMIN, user_idAd, tag)
+        print(f"{recommendation}")
+        if recommendation:
+            print(f"{recommendation}")
+        else:
+            print("None exists")
 
     else:
         print("Invalid action.")
