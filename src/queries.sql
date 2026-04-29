@@ -100,7 +100,7 @@ SELECT COUNT(*) FROM follows
     WHERE target_user_id = ? AND follower_user_id = ?
 
 -- List all recommendations
-SELECT r.recommendation_id FROM recommendations r
+SELECT recommendation_id FROM recommendations
     LIMIT ?
     OFFSET ?
 
@@ -111,7 +111,7 @@ DELETE FROM recommendations
 -- List all recommendations with a given tag
 SELECT r.recommendation_id FROM recommendations r
     JOIN tags t ON r.recommendation_id = t.recommendation_id 
-    WHERE t.tag = ?
+    WHERE t.recommendation_id = ?
     LIMIT ?
     OFFSET ?
 
